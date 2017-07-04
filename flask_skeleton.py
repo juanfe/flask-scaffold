@@ -51,6 +51,22 @@ def generate_brief(args):
     template = template_env.get_template('brief.jinja2')
     return template.render(template_var)
 
+def install_req(venv_bin, fullpath):
+    print("Install requirements.txt")
+    output, error = subprocess.Popen(
+        [
+            os.path.join(venv_bin, 'pip'),
+            'install',
+            '-r',
+            os.path.join(fullpath, 'requirements.txt')
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    ).communicate()
+    if error:
+        with open('pip_error.log', 'w') as fd:
+            fd.write(error.decode('utf-8'))
+            sys.exit(2)
 
 def main(args):
 
@@ -98,6 +114,10 @@ def main(args):
             print("Could not find bower. Ignoring.")
 
     # Add a virtualenv
+    bin_path = 'bin'
+    if sys.platform == 'win32':
+        bin_path = 'Scripts'
+
     virtualenv = args.virtualenv
     if virtualenv:
         print("Adding a virtualenv...")
@@ -113,24 +133,25 @@ def main(args):
                     fd.write(error.decode('utf-8'))
                     print("An error occurred with virtualenv")
                     sys.exit(2)
-            venv_bin = os.path.join(fullpath, 'env/bin')
+            venv_bin = os.path.join(fullpath, 'env', bin_path)
+            install_req(venv_bin, fullpath)
+        else:
+            print("Could not find virtualenv executable. Try venv")
+            _, l_appname = os.path.split(appname)
+            venv_path = os.path.join(os.environ['USERPROFILE'], '.virtualenvs', l_appname)
+            print("venv_path ", venv_path)
             output, error = subprocess.Popen(
-                [
-                    os.path.join(venv_bin, 'pip'),
-                    'install',
-                    '-r',
-                    os.path.join(fullpath, 'requirements.txt')
-                ],
+                ["python.exe", "-m", "venv", venv_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             ).communicate()
             if error:
-                with open('pip_error.log', 'w') as fd:
+                with open('virtualenv_error.log', 'w') as fd:
                     fd.write(error.decode('utf-8'))
+                    print("An error occurred with virtualenv")
                     sys.exit(2)
-        else:
-            print("Could not find virtualenv executable. Ignoring")
-
+            venv_bin = os.path.join(venv_path, bin_path)
+            install_req(venv_bin, fullpath)
     # Git init
     if args.git:
         print("Initializing Git...")
