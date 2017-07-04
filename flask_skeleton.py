@@ -151,7 +151,19 @@ def main(args):
                     print("An error occurred with virtualenv")
                     sys.exit(2)
             venv_bin = os.path.join(venv_path, bin_path)
+
+            if sys.platform == "win32":
+                output, error = subprocess.Popen(
+                    ["cmd", "/c", "mklink", os.path.join(fullpath, "activate_venv.bat"), os.path.join(venv_bin, "activate.bat")],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                ).communicate()
+            
+            if error:
+                print('Couldn\'t create symbolic link')
+
             install_req(venv_bin, fullpath)
+
     # Git init
     if args.git:
         print("Initializing Git...")
