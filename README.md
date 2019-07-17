@@ -5,8 +5,10 @@ To create a new project use:
 ```sh
 $ mkvirtualenv flask_scaffold --python=/usr/bin/python3.X
 $ pip install -r requirements.txt
-$ python flask_skeleton.py new_project -s skeleton -b 'angular, jquery, bootstrap' -g -v
+$ python flask_skeleton.py new_project -s skeleton -y 'angular, jquery, bootstrap' -g -v
 ```
+
+If you use born instead of yarn use -b instead of -y.
 
 This article details how to build a scaffolding tool used to generate a Flask boilerplate.
 

@@ -31,6 +31,7 @@ def get_arguments(argv):
     parser.add_argument('appname', help='The application name')
     parser.add_argument('-s', '--skeleton', help='The skeleton folder to use.')
     parser.add_argument('-b', '--bower', help='Install dependencies via bower')
+    parser.add_argument('-y', '--yarn', help='Install dependencies via bower')
     parser.add_argument('-v', '--virtualenv', action='store_true')
     parser.add_argument('-g', '--git', action='store_true')
     args = parser.parse_args()
@@ -42,6 +43,7 @@ def generate_brief(args):
         'pyversion': platform.python_version(),
         'appname': args.appname,
         'bower': args.bower,
+        'yarn': args.yarn,
         'virtualenv': args.virtualenv,
         'skeleton': args.skeleton,
         'path': os.path.join(cwd, args.appname),
@@ -112,6 +114,54 @@ def install_req(venv_bin, fullpath):
         with open('pip_error.log', 'w') as fd:
             fd.write(error.decode('utf-8'))
             sys.exit(2)
+
+
+def add_yarn_or_bower(args, fullpath):
+    if args.yarn:
+        print("Adding yarn dependencies...")
+        yarn = args.yarn.split(',')
+        yarn_exe = which('yarn')
+        if yarn_exe:
+            os.chdir(os.path.join(fullpath, 'project', 'client', 'static'))
+            output, error = subprocess.Popen(
+                [yarn_exe, 'init', '-y'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=fullpath
+            ).communicate()
+            if error:
+                print("An error occurred at init Yarn, please check the "
+                      "package.json file.")
+                print(error.decode('ascii'))
+            for dependency in yarn:
+                output, error = subprocess.Popen(
+                    [yarn_exe, 'add', dependency],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    cwd=fullpath
+                ).communicate()
+                if error:
+                    print("An error occurred with Yarn")
+                    print(error.decode('ascii'))
+        else:
+            print("Could not find yarn. Ignoring.")
+    elif args.bower:
+        print("Adding bower dependencies...")
+        bower = args.bower.split(',')
+        bower_exe = which('bower')
+        if bower_exe:
+            os.chdir(os.path.join(fullpath, 'project', 'client', 'static'))
+            for dependency in bower:
+                output, error = subprocess.Popen(
+                    [bower_exe, 'install', dependency],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                ).communicate()
+                if error:
+                    print("An error occurred with Bower")
+                    print(error)
+        else:
+            print("Could not find bower. Ignoring.")
 
 
 def add_virtualenv(args, fullpath, appname):
@@ -211,24 +261,7 @@ def main(args):
         fd.write(template.render(template_var))
 
     # Add bower dependencies
-    if args.bower:
-        print("Adding bower dependencies...")
-        bower = args.bower.split(',')
-        bower_exe = which('bower')
-        if bower_exe:
-            os.chdir(os.path.join(fullpath, 'project', 'client', 'static'))
-            for dependency in bower:
-                output, error = subprocess.Popen(
-                    [bower_exe, 'install', dependency],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                ).communicate()
-                if error:
-                    print("An error occurred with Bower")
-                    print(error)
-        else:
-            print("Could not find bower. Ignoring.")
-
+    add_yarn_or_bower(args, fullpath)
     # Add a virtualenv
     add_virtualenv(args, fullpath, appname)
     # Git init
