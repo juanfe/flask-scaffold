@@ -7,13 +7,12 @@ import jinja2
 import codecs
 import subprocess
 import shutil
+import platform
 
 if sys.version_info < (3, 0):
     from shutilwhich import which
 else:
     from shutil import which
-
-import platform
 
 
 # Globals #
@@ -51,6 +50,52 @@ def generate_brief(args):
     template = template_env.get_template('brief.jinja2')
     return template.render(template_var)
 
+
+def git_init(arg, fullpath, name=None, email=None):
+    if arg:
+        output = subprocess.Popen(
+            ['git', 'init', fullpath],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        error = output.communicate()[1]
+        if error:
+            with open('git_error.log', 'w') as fd:
+                fd.write(error.decode('utf-8'))
+                print("Error with git init")
+                sys.exit(2)
+        if name != '':
+            output.wait()
+            output2 = subprocess.Popen(
+                ['git', 'config', '--local', 'user.name', name, fullpath],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=fullpath
+            )
+            error2 = output2.communicate()[1]
+        if email != '':
+            if name != '':
+                output2.wait()
+            else:
+                output.wait()
+            output3 = subprocess.Popen(
+                ['git', 'config', '--local', 'user.email', email, fullpath],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=fullpath
+            )
+            error3 = output3.communicate()[1]
+        if (name != '' and error2) or (email != '' and error3):
+            with open('git_error.log', 'w') as fd:
+                fd.write(error.decode('utf-8'))
+                print("Error with git config")
+                sys.exit(2)
+        shutil.copyfile(
+            os.path.join(script_dir, 'templates', '.gitignore'),
+            os.path.join(fullpath, '.gitignore')
+        )
+
+
 def install_req(venv_bin, fullpath):
     print("Install requirements.txt")
     output, error = subprocess.Popen(
@@ -68,6 +113,71 @@ def install_req(venv_bin, fullpath):
             fd.write(error.decode('utf-8'))
             sys.exit(2)
 
+
+def add_virtualenv(args, fullpath, appname):
+    bin_path = 'bin'
+    if sys.platform == 'win32':
+        bin_path = 'Scripts'
+
+    virtualenv = args.virtualenv
+    if virtualenv:
+        print("Adding a virtualenv...")
+        virtualenv_exe = which('pyvenv')
+        if virtualenv_exe:
+            output, error = subprocess.Popen(
+                [virtualenv_exe, os.path.join(fullpath, 'env')],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            ).communicate()
+            if error:
+                with open('virtualenv_error.log', 'w') as fd:
+                    fd.write(error.decode('utf-8'))
+                    print("An error occurred with virtualenv")
+                    sys.exit(2)
+            venv_bin = os.path.join(fullpath, 'env', bin_path)
+            install_req(venv_bin, fullpath)
+        elif which('venvs'):
+            print("Could not find virtualenv executable. Try venv")
+            _, l_appname = os.path.split(appname)
+            try:
+                venv_path = os.path.join(os.environ['USERPROFILE'],
+                                         '.virtualenvs', l_appname)
+            except KeyError:
+                print(80*"*")
+                print("Please define variable USERPROFILE.")
+                print(80*"*")
+                raise
+            print("venv_path ", venv_path)
+            output, error = subprocess.Popen(
+                ["python.exe", "-m", "venv", venv_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            ).communicate()
+            if error:
+                with open('virtualenv_error.log', 'w') as fd:
+                    fd.write(error.decode('utf-8'))
+                    print("An error occurred with virtualenv")
+                    sys.exit(2)
+            venv_bin = os.path.join(venv_path, bin_path)
+
+            if sys.platform == "win32":
+                output, error = subprocess.Popen(
+                    ["cmd", "/c", "mklink", os.path.join(fullpath,
+                                                         "activate_venv.bat"),
+                     os.path.join(venv_bin, "activate.bat")],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                ).communicate()
+
+            if error:
+                print('Couldn\'t create symbolic link')
+
+            install_req(venv_bin, fullpath)
+        else:
+            print("Could not find virtualenv executable, Try with "
+                  "virtualenvwrapper or other. Ignoring.")
+
+
 def main(args):
 
     print("\nScaffolding...")
@@ -82,8 +192,14 @@ def main(args):
 
     # Copy files and folders
     print("Copying files and folders...")
-    shutil.copytree(os.path.join(script_dir, skeleton_dir), fullpath)
-
+    try:
+        shutil.copytree(os.path.join(script_dir, skeleton_dir), fullpath)
+    except FileExistsError:
+        shutil.rmtree(fullpath)
+        shutil.copytree(os.path.join(script_dir, skeleton_dir), fullpath)
+    except Exception:
+        print("Unexpected error:", sys.exc_info()[0])
+        raise
     # Create config.py
     print("Creating the config...")
     secret_key = codecs.encode(os.urandom(32), 'hex').decode('utf-8')
@@ -114,73 +230,9 @@ def main(args):
             print("Could not find bower. Ignoring.")
 
     # Add a virtualenv
-    bin_path = 'bin'
-    if sys.platform == 'win32':
-        bin_path = 'Scripts'
-
-    virtualenv = args.virtualenv
-    if virtualenv:
-        print("Adding a virtualenv...")
-        virtualenv_exe = which('pyvenv')
-        if virtualenv_exe:
-            output, error = subprocess.Popen(
-                [virtualenv_exe, os.path.join(fullpath, 'env')],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            ).communicate()
-            if error:
-                with open('virtualenv_error.log', 'w') as fd:
-                    fd.write(error.decode('utf-8'))
-                    print("An error occurred with virtualenv")
-                    sys.exit(2)
-            venv_bin = os.path.join(fullpath, 'env', bin_path)
-            install_req(venv_bin, fullpath)
-        else:
-            print("Could not find virtualenv executable. Try venv")
-            _, l_appname = os.path.split(appname)
-            venv_path = os.path.join(os.environ['USERPROFILE'], '.virtualenvs', l_appname)
-            print("venv_path ", venv_path)
-            output, error = subprocess.Popen(
-                ["python.exe", "-m", "venv", venv_path],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            ).communicate()
-            if error:
-                with open('virtualenv_error.log', 'w') as fd:
-                    fd.write(error.decode('utf-8'))
-                    print("An error occurred with virtualenv")
-                    sys.exit(2)
-            venv_bin = os.path.join(venv_path, bin_path)
-
-            if sys.platform == "win32":
-                output, error = subprocess.Popen(
-                    ["cmd", "/c", "mklink", os.path.join(fullpath, "activate_venv.bat"), os.path.join(venv_bin, "activate.bat")],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                ).communicate()
-            
-            if error:
-                print('Couldn\'t create symbolic link')
-
-            install_req(venv_bin, fullpath)
-
+    add_virtualenv(args, fullpath, appname)
     # Git init
-    if args.git:
-        print("Initializing Git...")
-        output, error = subprocess.Popen(
-            ['git', 'init', fullpath],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        ).communicate()
-        if error:
-            with open('git_error.log', 'w') as fd:
-                fd.write(error.decode('utf-8'))
-                print("Error with git init")
-                sys.exit(2)
-        shutil.copyfile(
-            os.path.join(script_dir, 'templates', '.gitignore'),
-            os.path.join(fullpath, '.gitignore')
-        )
+    git_init(args.git, fullpath, args.name, args.email)
 
 
 if __name__ == '__main__':
@@ -188,6 +240,9 @@ if __name__ == '__main__':
     print(generate_brief(arguments))
     if sys.version_info < (3, 0):
         input = raw_input
+    if arguments.git:
+        arguments.name = input("\nGive me your full name: (Enter for None) ")
+        arguments.email = input("\nGive me your email: (Enter for None) ")
     proceed = input("\nProceed (yes/no)? ")
     valid = ["yes", "y", "no", "n"]
     while True:
