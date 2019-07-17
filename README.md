@@ -8,7 +8,7 @@ $ pip install -r requirements.txt
 $ python flask_skeleton.py new_project -s skeleton -y 'angular, jquery, bootstrap' -g -v
 ```
 
-If you use born instead of yarn use -b instead of -y.
+If you use Bowern instead of Yarn use -b instead of -y.
 
 This article details how to build a scaffolding tool used to generate a Flask boilerplate.
 
